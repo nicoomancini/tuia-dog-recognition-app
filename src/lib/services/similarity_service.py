@@ -77,7 +77,7 @@ class SimilarityService:
             backbone = models.convnext_tiny()
             backbone.classifier = torch.nn.Identity()
 
-            ruta = Path(os.getenv("MODEL_PATH", "../models")) / f"{os.getenv('EMBEDDING_MODEL', 'baseline')}.pth"
+            ruta = Path(os.getenv("MODEL_PATH", "../models")) / "baseline.pth"
             ruta_modelo = ruta if ruta.exists() else Path(str(ruta).replace("../", "", 1))
             
             state_dict = torch.load(ruta_modelo, map_location=self.device, weights_only=True)
