@@ -1,0 +1,14 @@
+pydantic-settings==2.13.1 
+python-dotenv==1.2.2 
+kagglehub>=0.3 
+albumentations==2.0.8 
+pgvector==0.4.2 
+psycopg==3.3.3
+torch==2.11.0
+torchvision==0.26.0
+opencv-python-headless==4.13.0.92
+scikit-learn==1.8.0
+pandas==3.0.2
+matplotlib==3.10.8
+pillow==12.2.0
+numpy==2.4.4
