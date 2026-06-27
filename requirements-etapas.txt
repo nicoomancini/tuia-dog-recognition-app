@@ -1,14 +1,28 @@
-pydantic-settings==2.13.1 
-python-dotenv==1.2.2 
-kagglehub>=0.3 
-albumentations==2.0.8 
-pgvector==0.4.2 
+# Configuración y entorno
+pydantic-settings==2.13.1
+python-dotenv==1.2.2
+kagglehub>=0.3
+
+# Deep Learning / CV
+torch==2.7.1
+torchvision==0.22.1
+ultralytics==8.3.190
+
+# Procesamiento de datos e imágenes
+numpy==2.2.6
+pandas==2.3.2
+matplotlib==3.10.6
+seaborn==0.13.2
+opencv-python-headless==4.12.0.88
+Pillow==11.3.0
+
+# Machine Learning / métricas
+scikit-learn==1.7.2
+
+# Base de datos vectorial
+pgvector==0.4.2
 psycopg==3.3.3
-torch==2.11.0
-torchvision==0.26.0
-opencv-python-headless==4.13.0.92
-scikit-learn==1.8.0
-pandas==3.0.2
-matplotlib==3.10.8
-pillow==12.2.0
-numpy==2.4.4
+
+# Utilidades
+gdown==5.2.0
+albumentations==2.0.8

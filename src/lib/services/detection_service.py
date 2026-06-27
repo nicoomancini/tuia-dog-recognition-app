@@ -4,9 +4,12 @@ import json
 import logging
 from pathlib import Path
 from uuid import uuid4
+from torchvision import datasets, transforms
+import torch
 
 import cv2
 import numpy as np
+from ultralytics import YOLO
 
 from lib.schemas import ClassifyResult, DetectResult, DogDetection
 from lib.services.classifier_service import ClassifierService
@@ -75,7 +78,28 @@ class DetectionService:
 
         Retorna una lista de ((x1, y1, x2, y2), confidence) en pixeles.
         """
-        raise NotImplementedError("Etapa 3: implementar detect_dogs")
+        
+        if not hasattr(self, '_yolo'):
+            self._yolo = YOLO(self.yolo_model_name)
+    
+        results = self._yolo(
+            image,
+            classes=[self.dog_class_id],
+            conf=self.conf_threshold,
+            iou=0.45,
+            imgsz=640,
+            verbose=False,
+        )
+
+        bounding_boxes = []
+        for r in results:
+            for box in r.boxes:
+                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy().astype(int)
+                conf_score = float(box.conf[0])
+                bounding_boxes.append(((x1, y1, x2, y2), conf_score))
+
+        return bounding_boxes
+
 
     def classify_detected_dog(self, crop: np.ndarray) -> tuple[str, float]:
         """
@@ -84,7 +108,39 @@ class DetectionService:
 
         El recorte llega en BGR (OpenCV). Retorna (raza, score).
         """
-        raise NotImplementedError("Etapa 3: implementar classify_detected_dog")
+        model = self.classifier.load_model()
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        model = model.to(device)
+        model.eval()
+
+        if not hasattr(self, '_idx_to_class'):
+            dummy_transform = transforms.Compose([
+                transforms.Resize((self.classifier.image_size, self.classifier.image_size)),
+                transforms.ToTensor(),
+            ])
+            train_dataset = datasets.ImageFolder(
+                self.classifier.dataset_path / "train",
+                transform=dummy_transform,
+            )
+            self._idx_to_class = {v: k for k, v in train_dataset.class_to_idx.items()}
+
+        transform = transforms.Compose([
+            transforms.ToPILImage(),
+            transforms.Resize((self.classifier.image_size, self.classifier.image_size)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ])
+
+        img_rgb = cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
+        tensor  = transform(img_rgb).unsqueeze(0).to(device)
+
+        with torch.no_grad():
+            logits = model(tensor)
+            probs  = torch.softmax(logits, dim=1)
+            score, idx = torch.max(probs, dim=1)
+
+        breed = self._idx_to_class[idx.item()]
+        return breed, score.item()
 
     # ------------------------------------------------------------------
     # Orquestacion provista
