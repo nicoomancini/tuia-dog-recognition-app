@@ -21,36 +21,48 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 class CustomCNN(nn.Module):
-    def __init__(self, num_classes: int):
-        super(CustomCNN, self).__init__()
-        
+    """
+    CNN propia de 4 bloques convolucionales con BatchNorm, ReLU y MaxPool.
+    Cabeza clasificadora con Global Average Pooling + 2 capas densas y Dropout.
+    """
+
+    def __init__(self, num_classes: int, dropout_p: float = 0.4):
+        super().__init__()
+
+        def conv_block(in_ch, out_ch):
+            return nn.Sequential(
+                nn.Conv2d(in_ch, out_ch, kernel_size=3, padding=1, bias=False),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(out_ch, out_ch, kernel_size=3, padding=1, bias=False),
+                nn.BatchNorm2d(out_ch),
+                nn.ReLU(inplace=True),
+                nn.MaxPool2d(2, 2),
+            )
+
         self.features = nn.Sequential(
-            nn.Conv2d(3, 32, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2, 2), 
-            
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
-            nn.ReLU(),
-            nn.MaxPool2d(2, 2),
-            
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128), 
-            nn.ReLU(),
-            nn.MaxPool2d(2, 2)
+            conv_block(3,   64),   # 224 -> 112
+            conv_block(64,  128),  # 112 -> 56
+            conv_block(128, 256),  # 56  -> 28
+            conv_block(256, 512),  # 28  -> 14
         )
-        
-        self.adaptive_pool = nn.AdaptiveAvgPool2d((7, 7))
-        self.flatten = nn.Flatten()
-        
-        self.hidden = nn.Sequential(nn.Linear(128 * 7 * 7, 512), nn.ReLU(), nn.Dropout(0.5))
-        self.fc = nn.Linear(512, num_classes)
+        self.global_pool = nn.AdaptiveAvgPool2d((1, 1))  # -> 512 x 1 x 1
+
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(512, 512),
+            nn.ReLU(inplace=True),
+            nn.Dropout(dropout_p),
+            nn.Linear(512, 256),
+            nn.ReLU(inplace=True),
+            nn.Dropout(dropout_p),
+            nn.Linear(256, num_classes),
+        )
 
     def forward(self, x):
         x = self.features(x)
-        x = self.adaptive_pool(x)
-        x = self.flatten(x)
-        x = self.hidden(x)
-        return self.fc(x)
+        x = self.global_pool(x)
+        return self.classifier(x)
 
 
 class ClassifierService:
@@ -125,7 +137,15 @@ class ClassifierService:
     # Etapa 2: funciones a implementar
     # ------------------------------------------------------------------
 
-    def train_classifier(self) -> None:
+    def train_classifier(
+        self,
+        epochs: int = 20,
+        batch_size: int = 32,
+        lr: float = 1e-4,
+        patience: int = 5,
+        weight_decay: float = 1e-4,
+        dropout_p: float = 0.4,
+    ) -> dict:
         """
         Entrena el clasificador de razas sobre el dataset (self.dataset_path).
 
@@ -138,9 +158,6 @@ class ClassifierService:
           - Guardar el checkpoint resultante en self.active_checkpoint
             (ej: models/resnet18_finetuned.pth).
         """
-        BATCH_SIZE = 32
-        LEARNING_RATE = 1e-4
-        EPOCHS = 20
 
         logger.info(f"Iniciando entrenamiento para el modelo: {self.active_model_name}")
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -173,30 +190,32 @@ class ClassifierService:
         valid_dataset = datasets.ImageFolder(valid_dir, transform=valid_transform)
         num_classes = len(train_dataset.classes)
 
-        train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=0)
-        valid_loader = DataLoader(valid_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
+        train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=0)
+        valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=False, num_workers=0)
 
         # Seleccion de Arquitectura 
         if "resnet18" in self.active_model_name:
             model = models.resnet18(weights=models.ResNet18_Weights.IMAGENET1K_V1)
             num_ftrs = model.fc.in_features
-            model.fc = nn.Linear(num_ftrs, num_classes)
-            
+            model.fc = nn.Sequential(
+                nn.Dropout(dropout_p),
+                nn.Linear(num_ftrs, num_classes),
+            )
+                
         elif "resnet50" in self.active_model_name:
             model = models.resnet50(weights=models.ResNet50_Weights.IMAGENET1K_V1)
             num_ftrs = model.fc.in_features
-            model.fc = nn.Linear(num_ftrs, num_classes)
+            model.fc = nn.Sequential(
+                nn.Dropout(dropout_p),
+                nn.Linear(num_ftrs, num_classes),
+            )
             
         elif self.active_model_name == "cnn_custom":
-            model = CustomCNN(num_classes=num_classes)
+            model = CustomCNN(num_classes=num_classes, dropout_p=dropout_p)
             
         else:
             raise ValueError(f"Arquitectura no soportada: {self.active_model_name}")
 
-        model = model.to(device)
-
-        num_ftrs = model.fc.in_features
-        model.fc = nn.Linear(num_ftrs, num_classes)
         model = model.to(device)
 
         # Correción del desbalance de clases 
@@ -207,19 +226,20 @@ class ClassifierService:
 
         # Optimizador y Función de Pérdida
         criterion = nn.CrossEntropyLoss(weight=class_weights_tensor)
-        optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+        optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.5, patience=2, verbose=True)
 
         # Bucle de Entrenamiento
         best_acc = 0.0
         history = {'train_loss': [], 'val_acc': []}
-        patience = 5
         epochs_no_improve = 0
+        best_state = None
 
-        for epoch in range(EPOCHS):
+        for epoch in range(epochs):
             model.train()
             running_loss = 0.0
             
-            for inputs, labels in tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS} [Train]"):
+            for inputs, labels in tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} [Train]"):
                 inputs, labels = inputs.to(device), labels.to(device)
                 
                 optimizer.zero_grad()
@@ -235,7 +255,7 @@ class ClassifierService:
             correct = 0
             total = 0
             with torch.no_grad():
-                for inputs, labels in tqdm(valid_loader, desc=f"Epoch {epoch+1}/{EPOCHS} [Valid]"):
+                for inputs, labels in tqdm(valid_loader, desc=f"Epoch {epoch+1}/{epochs} [Valid]"):
                     inputs, labels = inputs.to(device), labels.to(device)
                     outputs = model(inputs)
                     _, predicted = torch.max(outputs.data, 1)
@@ -247,6 +267,8 @@ class ClassifierService:
             history['val_acc'].append(val_acc)
             logger.info(f"Epoch {epoch+1} | Loss: {running_loss/len(train_loader):.4f} | Val Acc: {val_acc:.4f}")
 
+            scheduler.step(val_acc)
+
             # Guardar el mejor modelo
             if val_acc > best_acc:
                 best_acc = val_acc
@@ -254,6 +276,7 @@ class ClassifierService:
                 
                 self.active_checkpoint.parent.mkdir(parents=True, exist_ok=True)
                 torch.save(model, self.active_checkpoint)
+                best_state = {k: v.cpu().clone() for k, v in model.state_dict().items()}
                 logger.info(f"Nuevo mejor modelo encontrado con Acc: {best_acc:.4f}")
             else:
                 epochs_no_improve += 1
@@ -262,8 +285,12 @@ class ClassifierService:
                 if epochs_no_improve >= patience:
                     logger.info(f"Early stopping activado. El modelo no mejoró en {patience} épocas.")
                     break 
-        
-        return history      
+
+        if best_state:
+            model.load_state_dict(best_state)
+
+        return history
+
 
     def evaluate_classifier(self) -> dict[str, float]:
         """
@@ -282,21 +309,21 @@ class ClassifierService:
         model = model.to(device)
         model.eval()
 
-        valid_dir = self.dataset_path / "valid"
-        valid_transform = transforms.Compose([
+        test_dir = self.dataset_path / "test"
+        test_transform = transforms.Compose([
             transforms.Resize((self.image_size, self.image_size)),
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         ])
         
-        valid_dataset = datasets.ImageFolder(valid_dir, transform=valid_transform)
-        valid_loader = DataLoader(valid_dataset, batch_size=32, shuffle=False)
+        test_dataset = datasets.ImageFolder(test_dir, transform=test_transform)
+        test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
 
         all_preds = []
         all_labels = []
 
         with torch.no_grad():
-            for inputs, labels in tqdm(valid_loader, desc="Evaluando modelo"):
+            for inputs, labels in tqdm(test_loader, desc="Evaluando modelo"):
                 inputs = inputs.to(device)
                 outputs = model(inputs)
                 _, predicted = torch.max(outputs, 1)
@@ -312,9 +339,11 @@ class ClassifierService:
         cm = confusion_matrix(all_labels, all_preds)
         specificities = []
         for i in range(len(cm)):
-            tn = np.sum(cm) - np.sum(cm[i, :]) - np.sum(cm[:, i]) + cm[i, i]
-            fp = np.sum(cm[:, i]) - cm[i, i]
-            specificities.append(tn / (tn + fp + 1e-9))
+            tp = cm[i, i]
+            fn = cm[i, :].sum() - tp
+            fp = cm[:, i].sum() - tp
+            tn = cm.sum() - tp - fn - fp
+            specificities.append(tn / (tn + fp) if (tn + fp) > 0 else 0.0)
             
         spec = np.mean(specificities)
 
@@ -328,41 +357,3 @@ class ClassifierService:
         }
         
         return metrics
-
-    def extract_custom_embedding(self, image: np.ndarray) -> list[float]:
-        """
-        Genera el embedding de una imagen usando el modelo propio activo
-        (penultima capa del ResNet18 fine-tuned o de la CNN custom).
-
-        Se usa cuando EMBEDDING_MODEL != baseline para que la busqueda por
-        similitud (Etapa 1) funcione con los modelos entrenados.
-        La imagen llega en BGR (OpenCV). Retorna una lista de floats de
-        dimension EMBEDDING_DIM.
-        """
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model = self.load_model()
-        model = model.to(device)
-        model.eval()
-
-        if hasattr(model, 'fc'):
-            original_fc = model.fc
-            model.fc = nn.Identity()
-
-        size = self.image_size if isinstance(self.image_size, tuple) else (self.image_size, self.image_size)
-        transform = transforms.Compose([
-            transforms.ToPILImage(),
-            transforms.Resize(size),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ])
-
-        img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        tensor = transform(img_rgb).unsqueeze(0).to(device)
-
-        with torch.no_grad():
-            emb = model(tensor).squeeze().flatten().cpu().numpy()
-
-        if hasattr(model, 'fc'):
-            model.fc = original_fc
-
-        return emb.tolist()
