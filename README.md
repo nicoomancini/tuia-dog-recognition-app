@@ -206,32 +206,40 @@ tp2/
 │       ├── files.py
 │       ├── schemas.py
 │       ├── evaluation/
-│       │   └── metrics.py          # NDCG@10, precision/recall/F1, specificity (provisto)
+│       │   └── metrics.py          
 │       ├── visualization/
-│       │   └── draw.py             # dibujo de bounding boxes (provisto)
+│       │   └── draw.py             
 │       ├── services/
-│       │   ├── similarity_service.py   # Etapa 1
-│       │   ├── classifier_service.py   # Etapa 2
-│       │   ├── detection_service.py    # Etapa 3
+│       │   ├── similarity_service.py   
+│       │   ├── classifier_service.py   
+│       │   ├── detection_service.py   
 │       │   └── task_manager.py
 │       └── storage/
-│           ├── embedding_store.py      # base vectorial JSON
-│           └── pgvector_store.py       # base vectorial PostgreSQL + pgvector
+│           ├── embedding_store.py      
+│           └── pgvector_store.py       
 ├── scripts/
-│   ├── download_dataset.py         # descarga el dataset de Kaggle
-│   ├── build_index.py              # indexa el dataset en la base vectorial
-│   └── train_classifier.py         # entrena/evalua el clasificador (Etapa 2)
+│   ├── download_dataset.py         
+│   ├── build_index.py              
+│   └── train_classifier.py         
 ├── data/
-│   ├── dataset/                    # 70 Dog Breeds Image Dataset (no se versiona)
-│   └── embeddings.json             # base vectorial JSON (si USE_PGVECTOR=false)
-├── models/                         # checkpoints entrenados (no se versionan)
+│   ├── dataset/                    
+│   └── embeddings.json             
+├── models/                         
 ├── output/
-├── informe.ipynb                   # informe tecnico
-├── etapa2_colab.ipynb              # Etapa 2: dataset, preprocesamiento y entrenamiento (Google Colab)
+├── docs/
+│   └── screenshots/                
+├── informe.ipynb                   
+├── etapa1_colab.ipynb              
+├── etapa2_colab.ipynb              
+├── etapa3_colab.ipynb              
+├── Trabajo Práctico N°2.pdf        
 ├── requirements.txt
+├── requirements-etapas.txt         
 ├── Dockerfile
 ├── Dockerfile.frontend
 ├── docker-compose.yml
+├── .dockerignore
+├── .gitignore
 └── .env.docker.example / .env.local.example
 ```
 
