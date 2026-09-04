@@ -8,6 +8,10 @@ from uuid import uuid4
 
 import cv2
 import numpy as np
+import torch
+import torchvision.models as models
+import torchvision.transforms as T
+import os
 
 from lib.schemas import EmbeddingRecord, Neighbor, SearchResult
 from lib.storage.base import EmbeddingStoreProtocol
@@ -68,7 +72,34 @@ class SimilarityService:
           - Recordar que la imagen llega en BGR (OpenCV).
         Retorna una lista de floats de dimension EMBEDDING_DIM.
         """
-        raise NotImplementedError("Etapa 1: implementar extract_embedding")
+        if not hasattr(self, "_backbone"): 
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            backbone = models.convnext_tiny()
+            backbone.classifier = torch.nn.Identity()
+
+            ruta = Path(os.getenv("MODEL_PATH", "../models")) / "baseline.pth"
+            ruta_modelo = ruta if ruta.exists() else Path(str(ruta).replace("../", "", 1))
+            
+            state_dict = torch.load(ruta_modelo, map_location=self.device, weights_only=True)
+            backbone.load_state_dict(state_dict)
+            
+            self._backbone = backbone.to(self.device).eval()
+            
+            size = self.image_size if isinstance(self.image_size, tuple) else (self.image_size, self.image_size)
+            self._transform = T.Compose([
+                T.ToPILImage(),
+                T.Resize(size),
+                T.ToTensor(),
+                T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ])
+
+        img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        tensor = self._transform(img_rgb).unsqueeze(0).to(self.device)
+        
+        with torch.no_grad():
+            emb = self._backbone(tensor).squeeze().flatten().cpu().numpy()
+            
+        return emb.tolist()
 
     def search_similar_images(self, embedding: list[float], top_k: int) -> list[Neighbor]:
         """
@@ -81,7 +112,21 @@ class SimilarityService:
         Retorna una lista de Neighbor (path, breed, score) ordenada por score
         descendente.
         """
-        raise NotImplementedError("Etapa 1: implementar search_similar_images")
+        if hasattr(self.store, "search"):
+            vector_busqueda = np.asarray(embedding, dtype=np.float32)
+            records = self.store.search(vector_busqueda, top_k)
+        else:
+            records = self.store.all()
+                
+        neighbors = []
+        for r in records:
+            clean_path = r.path.replace("\\", "/").replace("../", "")
+            puntaje = self.similarity(embedding, r.embedding)
+            vecino = Neighbor(path=clean_path, breed=r.breed, score=puntaje)
+            neighbors.append(vecino)     
+
+        neighbors.sort(key=lambda n: n.score, reverse=True)
+        return neighbors[:top_k]
 
     def predict_breed_from_neighbors(self, results: list[Neighbor]) -> tuple[str, float]:
         """
@@ -91,7 +136,34 @@ class SimilarityService:
         Si el mejor score esta por debajo de self.similarity_threshold se
         considera "unknown". Retorna (raza, score).
         """
-        raise NotImplementedError("Etapa 1: implementar predict_breed_from_neighbors")
+        if not results:
+            return "unknown", 0.0
+
+        mejor_vecino = results[0]
+        if mejor_vecino.score < self.similarity_threshold:
+            return "unknown", round(mejor_vecino.score, 4)
+
+        votos_por_raza = {}
+        for vecino in results:
+            raza = vecino.breed
+            puntaje = vecino.score
+        
+            if raza in votos_por_raza:
+                votos_por_raza[raza] += puntaje
+            else:
+                votos_por_raza[raza] = puntaje
+
+        raza_ganadora = max(votos_por_raza, key=votos_por_raza.get)
+
+        vecinos_ganadores = []
+        for vecino in results:
+            if vecino.breed == raza_ganadora:
+                vecinos_ganadores.append(vecino)
+                
+        suma_puntajes = sum(vecino.score for vecino in vecinos_ganadores)
+        promedio_final = suma_puntajes / len(vecinos_ganadores)
+
+        return raza_ganadora, round(promedio_final, 4)
 
     # ------------------------------------------------------------------
     # Helpers de similitud provistos

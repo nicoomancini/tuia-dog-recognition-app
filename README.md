@@ -1,60 +1,195 @@
-# TP2 - Sistema de Deteccion y Clasificacion de Razas de Perros
+<div align="center">
 
-Plantilla base para desarrollar un pipeline completo de Computer Vision:
+# Dog Breed Recognition
 
-**Embeddings -> Busqueda por similitud -> Clasificacion -> Deteccion -> Pipeline completo**
+Pipeline de Computer Vision end-to-end que combina búsqueda por similitud, clasificación
+supervisada y detección de objetos para identificar la raza de un perro a partir de una
+imagen.
 
-La catedra provee la infraestructura completa (Docker, aplicacion Gradio, base de datos
-vectorial, API, scripts y herramientas de evaluacion/visualizacion). El estudiante debe
-realizar un **fork** de este repositorio y completar **unicamente** las funciones indicadas
-en cada etapa. Cualquier modificacion fuera de esas funciones debera estar debidamente
-justificada en el informe.
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+![PyTorch](https://img.shields.io/badge/PyTorch-2.11.0-EE4C2C?logo=pytorch&logoColor=white)
+![torchvision](https://img.shields.io/badge/torchvision-0.26.0-EE4C2C?logo=pytorch&logoColor=white)
+![Ultralytics YOLO](https://img.shields.io/badge/Ultralytics-YOLOv8-111F68?logo=ultralytics&logoColor=white)
+![Gradio](https://img.shields.io/badge/Gradio-6.12.0-F97316?logo=gradio&logoColor=white)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.136.0-009688?logo=fastapi&logoColor=white)
+![OpenCV](https://img.shields.io/badge/OpenCV-4.13.0-5C3EE8?logo=opencv&logoColor=white)
+![scikit-learn](https://img.shields.io/badge/scikit--learn-1.8.0-F7931E?logo=scikitlearn&logoColor=white)
+![NumPy](https://img.shields.io/badge/NumPy-2.4.4-013243?logo=numpy&logoColor=white)
+![pandas](https://img.shields.io/badge/pandas-3.0.2-150458?logo=pandas&logoColor=white)
+![pgvector](https://img.shields.io/badge/pgvector-PostgreSQL-4169E1?logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
 
-## Funciones a implementar
+</div>
 
-| Etapa | Funcion | Archivo |
-|-------|---------|---------|
-| 1 | `extract_embedding(image)` | `src/lib/services/similarity_service.py` |
-| 1 | `search_similar_images(embedding, top_k)` | `src/lib/services/similarity_service.py` |
-| 1 | `predict_breed_from_neighbors(results)` | `src/lib/services/similarity_service.py` |
-| 2 | `train_classifier()` | `src/lib/services/classifier_service.py` |
-| 2 | `evaluate_classifier()` | `src/lib/services/classifier_service.py` |
-| 2 | `extract_custom_embedding(image)` | `src/lib/services/classifier_service.py` |
-| 3 | `detect_dogs(image)` | `src/lib/services/detection_service.py` |
-| 3 | `classify_detected_dog(crop)` | `src/lib/services/detection_service.py` |
+## Funcionalidades
 
-Cada funcion tiene su docstring con el comportamiento esperado y sugerencias.
+### Búsqueda por similitud
+La primera etapa implementa un sistema de recuperación de imágenes basado en similitud visual. El objetivo consiste en representar cada imagen mediante un vector de características (embedding) extraído por una red neuronal preentrenada y utilizar dicha representación para buscar ejemplos visualmente similares dentro de una base vectorial. A partir de los vecinos recuperados, se estima la raza predominante y se determina si la consulta pertenece o no a la distribución conocida mediante un umbral de similitud. Este enfoque aporta interpretabilidad al sistema, ya que las predicciones pueden justificarse mediante ejemplos concretos recuperados de la base de datos.
 
-### Alcance del trabajo del estudiante
+<div align="center">
 
-- **Etapas 1 y 3**: el trabajo se limita a completar las funciones indicadas (pocas y
-  pequeñas); toda la infraestructura, la orquestacion y el frontend ya estan provistos
-  y no deben modificarse.
-- **Etapa 2**: ademas de completar las funciones indicadas, el estudiante debera
-  **entrenar sus propios modelos** y realizar un **pequeño estudio de resultados**
-  (metricas, comparaciones y analisis de errores). Se trabaja en **Google Colab**
-  con la notebook provista:
-  - `etapa2_colab.ipynb`: entrenamiento y comparacion de modelos.
+`Imagen de entrada` → `extract_embedding` → `Embedding de consulta` → `search_similar_images` → `Top-K vecinos más similares` → `predict_breed_from_neighbors` → `Raza predicha o "unknown"`
 
-## Objetivo del backend
+</div>
 
-API asincronica en Python que permite:
+#### Screenshot de la aplicación
 
-- Busqueda por similitud (`/search`): imagen consultada, top K similares y raza predicha
-- Deteccion + clasificacion (`/detect`): bounding boxes, raza y scores de confianza
-- Consultar estado de procesamiento asincronico (`/status/{job_id}`)
-- Seleccion dinamica del modelo de embeddings (`/models` + campo `model` en `/search`)
+<div align="center"><img src="docs/sreenshots/etapa1_similitud.png" alt="Etapa 1 - Búsqueda por similitud" width="1000"/></div>
 
-La API responde `HTTP 202` con `job_id` y luego permite consultar resultado con estado:
+### Clasificación supervisada
+La segunda etapa corresponde al modelo de clasificación supervisada entrenado sobre el dataset 70-Dogs. A diferencia de la búsqueda por similitud, este enfoque aprende directamente una función que asocia una imagen de entrada con una de las razas disponibles en el conjunto de entrenamiento. El pipeline recibe una imagen completa, realiza el preprocesamiento correspondiente y genera una predicción acompañada de su nivel de confianza. Esta etapa constituye el núcleo del sistema de reconocimiento de razas y proporciona inferencias rápidas una vez finalizado el entrenamiento.
 
-```json
-{
-  "status": "done | inProgress | failed",
-  "link": "url | none"
-}
+<div align="center">
+
+`Imagen de entrada` → `Preprocesamiento` → `classify_image` → `classify_detected_dog` → `Modelo clasificador` → `Raza predicha + confianza` → `Resultado JSON`
+
+</div>
+
+#### Screenshot de la aplicación
+
+<div align="center"><img src="docs/sreenshots/etapa2_clasificacion.png" alt="Etapa 2 - Clasificación supervisada" width="1000"/></div>
+
+### Detección y clasificación
+
+La tercera etapa extiende el sistema para operar sobre imágenes que pueden contener uno o varios perros. Para ello se incorpora un detector basado en YOLO, encargado de localizar automáticamente cada perro presente en la escena mediante cajas delimitadoras (bounding boxes). Una vez obtenidas las detecciones, cada recorte es procesado individualmente por el clasificador entrenado en la etapa anterior para determinar su raza. Esta combinación permite separar el problema de localización del problema de clasificación, facilitando el procesamiento de escenas más complejas y cercanas a escenarios reales de uso.
+
+<div align="center">
+
+`Imagen de entrada` → `detect_dogs (YOLO)` → `Bounding boxes` → `Recorte de cada detección` → `classify_detected_dog` → `Modelo clasificador` → `Raza de cada perro` → `Resultado final`
+
+</div>
+
+#### Screenshot de la aplicación
+
+<div align="center"><img src="docs/sreenshots/etapa3_deteccion.png" alt="Etapa 3 - Detección y clasificación" width="1000"/></div>
+
+
+## Arquitectura
+
+| Etapa | Modelo | 
+|-------|--------|
+| 1. Embeddings + similitud | ConvNeXt-Tiny 
+| 2. Clasificación | ResNet18 (fine-tuned) 
+| 2. Clasificación (alternativa) | CNN propia (from scratch) | 
+| 3. Detección | YOLOv8n + clasificador de etapa 2 |
+
+## Instalación y uso
+
+### Requisitos
+
+- Python 3.12
+- Git
+- Docker Desktop
+- Cuenta de Kaggle
+
+### Opción 1 — Todo en Docker (recomendado)
+
+```bash
+docker compose build
+docker compose up -d
 ```
 
-## Estructura
+Servicios disponibles:
+- Frontend: `http://localhost:8080`
+- Backend: `http://localhost:8000`
+- Postgres: `localhost:5432`
+
+### Opción 2 — Entorno local
+
+1. **Cloná el repo**
+
+   ```bash
+   git clone <url-del-repo>
+   cd tuia-dog-recognition-app
+   ```
+
+2. **Creá un entorno virtual con Python 3.12**
+
+   ```bash
+   # Windows
+   python -m venv .venv
+   .venv\Scripts\Activate.ps1
+
+   # Linux / Mac
+   python3.12 -m venv .venv
+   source .venv/bin/activate
+   ```
+
+   Alternativa con [uv](https://docs.astral.sh/uv/getting-started/installation/):
+
+   ```bash
+   uv venv --python 3.12 .venv
+   ```
+
+3. **Instalá las dependencias**
+
+   ```bash
+   pip install -r requirements.txt
+   # o con uv:
+   uv pip install -r requirements.txt
+   ```
+
+4. **Configurá las variables de entorno**
+
+   ```bash
+   # Linux / Mac
+   cp .env.local.example src/.env
+
+   # Windows
+   copy .env.local.example src\.env
+   ```
+
+5. **Descargá el dataset**
+
+   ```bash
+   python scripts/download_dataset.py
+   ```
+
+   Requiere [credenciales de Kaggle](https://www.kaggle.com/docs/api) configuradas.
+   Dataset: [70 Dog Breeds Image Dataset (Kaggle)](https://www.kaggle.com/datasets/gpiosenka/70-dog-breedsimage-data-set).
+   También se puede descargar manualmente y descomprimir `train/`, `valid/` y `test/`
+   dentro de `data/dataset`.
+
+6. **Levantá la base de datos** (solo si `USE_PGVECTOR=true`, que es el default)
+
+   ```bash
+   docker compose up postgres -d
+   ```
+
+   Con `USE_PGVECTOR=false` se usa la base vectorial JSON (`data/embeddings.json`) y no
+   hace falta Docker para trabajar localmente.
+
+7. **Descargá los checkpoints entrenados** y colocalos en `models/` (ver `etapa2_colab.ipynb`
+   para reentrenar desde cero). Actualizá `RESNET18_MODEL_NAME` y `CNN_CUSTOM_MODEL_NAME`
+   en el `.env` con las rutas correspondientes. Soporta modelos `.pth` (PyTorch) y `.onnx`.
+
+8. **Indexá el dataset en la base vectorial**
+
+   ```bash
+   python scripts/build_index.py --split train
+   ```
+
+9. **Levantá el backend**
+
+   ```bash
+   cd src
+   uvicorn app.main:app --reload --port 8000
+   ```
+
+10. **Levantá el frontend** (en otra terminal, con el venv activado)
+
+    ```bash
+    cd src
+    uvicorn frontend.app:app --port 8080
+    ```
+
+11. **Verificá que todo esté corriendo**
+
+    - Frontend: `http://localhost:8080`
+    - Backend: `http://localhost:8000/health` (muestra el modelo seleccionado y los
+      checkpoints encontrados)
+
+## Estructura del proyecto
 
 ```text
 tp2/
@@ -71,313 +206,86 @@ tp2/
 │       ├── files.py
 │       ├── schemas.py
 │       ├── evaluation/
-│       │   └── metrics.py          # NDCG@10, precision/recall/F1, specificity (provisto)
+│       │   └── metrics.py          
 │       ├── visualization/
-│       │   └── draw.py             # dibujo de bounding boxes (provisto)
+│       │   └── draw.py             
 │       ├── services/
-│       │   ├── similarity_service.py   # Etapa 1
-│       │   ├── classifier_service.py   # Etapa 2
-│       │   ├── detection_service.py    # Etapa 3
+│       │   ├── similarity_service.py   
+│       │   ├── classifier_service.py   
+│       │   ├── detection_service.py   
 │       │   └── task_manager.py
 │       └── storage/
-│           ├── embedding_store.py      # base vectorial JSON
-│           └── pgvector_store.py       # base vectorial PostgreSQL + pgvector
+│           ├── embedding_store.py      
+│           └── pgvector_store.py       
 ├── scripts/
-│   ├── download_dataset.py         # descarga el dataset de Kaggle
-│   ├── build_index.py              # indexa el dataset en la base vectorial
-│   └── train_classifier.py         # entrena/evalua el clasificador (Etapa 2)
+│   ├── download_dataset.py         
+│   ├── build_index.py              
+│   └── train_classifier.py         
 ├── data/
-│   ├── dataset/                    # 70 Dog Breeds Image Dataset (no se versiona)
-│   └── embeddings.json             # base vectorial JSON (si USE_PGVECTOR=false)
-├── models/                         # checkpoints entrenados (no se versionan)
+│   ├── dataset/                    
+│   └── embeddings.json             
+├── models/                         
 ├── output/
-├── informe.ipynb                   # informe tecnico
-├── etapa2_colab.ipynb              # Etapa 2: dataset, preprocesamiento y entrenamiento (Google Colab)
+├── docs/
+│   └── screenshots/                
+├── informe.ipynb                   
+├── etapa1_colab.ipynb              
+├── etapa2_colab.ipynb              
+├── etapa3_colab.ipynb              
+├── Trabajo Práctico N°2.pdf        
 ├── requirements.txt
+├── requirements-etapas.txt         
 ├── Dockerfile
 ├── Dockerfile.frontend
 ├── docker-compose.yml
+├── .dockerignore
+├── .gitignore
 └── .env.docker.example / .env.local.example
 ```
 
-# Preparando el ambiente
+## Endpoints
 
-## Requisitos
+| Endpoint | Descripción |
+|----------|-------------|
+| `POST /upload` | Sube una imagen al servidor |
+| `POST /search` | Búsqueda por similitud (acepta `model` y `top_k`) |
+| `POST /classify` | Clasificación con el modelo entrenado |
+| `POST /detect` | Detección + clasificación |
+| `GET /status/{job_id}` | Estado del procesamiento asincrónico |
+| `GET /models` | Modelos de embeddings disponibles |
+| `GET /health` | Estado del backend |
 
-- Python 3.12
-- Docker Desktop (incluye Docker Compose)
-- Git
-- Cuenta de Kaggle (para descargar el dataset)
+Los endpoints asincrónicos (`/search`, `/detect`) responden `HTTP 202` con un `job_id`,
+que se consulta luego en `/status/{job_id}`:
 
-## Dataset
-
-Dataset principal: [70 Dog Breeds Image Dataset (Kaggle)](https://www.kaggle.com/datasets/gpiosenka/70-dog-breedsimage-data-set)
-
-```bash
-python scripts/download_dataset.py
+```json
+{
+  "status": "done | inProgress | failed",
+  "link": "url | none"
+}
 ```
 
-O descargarlo manualmente y descomprimir `train/`, `valid/` y `test/` dentro de `data/dataset`.
-
-## Configura tus modelos
-
-Entrena tus modelos (Etapa 2) en Google Colab con `etapa2_colab.ipynb`, descarga los
-checkpoints y guardalos dentro de la carpeta `models`. Por defecto, el modulo soporta
-modelos construidos con pytorch validando la extension **.pth**.
-
-Si eligen utilizar otro framework, pueden exportarlo a formato **.onnx**
-
-Recuerda actualizar las configuraciones del .env correspondiente para actualizar la ruta
-hacia tus modelos (`RESNET18_MODEL_NAME`, `CNN_CUSTOM_MODEL_NAME`).
-
-El entorno local con o sin docker reinicia la aplicacion y actualiza el codigo
-automaticamente si utilizan docker compose.
-
-Puede que el reinicio automatico no funcione en todas las versiones de Docker Desktop en
-sistemas *Windows*, en tal caso deberan correr los comandos como se mencionan en el
-siguiente apartado para actualizar el codigo dentro de docker.
-
-## Opcion 1 - Corriendo todo dentro de docker
-
-Es la forma en que la catedra evaluara el trabajo.
-
-### 1. Buildea y corre la aplicacion.
-
-Actualiza el archivo **.env.docker.example** y ajustalo a tus necesidades. Luego corre desde el terminal :
-
-```bash
-docker compose build
-docker compose up -d
-```
-
-Servicios disponibles: frontend en `http://localhost:8080`, backend en `http://localhost:8000`,
-postgres en `localhost:5432`.
-
-## Opcion 2 - Configurando el ambiente local desde cero
-
-### 1. Clona tu fork
-
-```bash
-git clone <url-de-tu-fork>
-cd tuia-dog-recognition-app
-```
-
-### 2. Crea un entorno virtual con Python 3.12
-
-Con python estandar:
-
-```bash
-# Linux / Mac
-python3.12 -m venv .venv
-
-# Windows
-python -m venv .venv
-```
-
-Alternativa con [uv](https://docs.astral.sh/uv/getting-started/installation/):
-
-```bash
-# Instalar uv en Linux / Mac
-curl -LsSf https://astral.sh/uv/install.sh | sh
-
-# Instalar uv en Windows (PowerShell)
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-
-# Crear el entorno
-uv venv --python 3.12 .venv
-```
-
-### 3. Activa el entorno virtual
-
-```bash
-# Linux / Mac
-source .venv/bin/activate
-```
-
-```powershell
-# Windows (PowerShell)
-.venv\Scripts\Activate.ps1
-
-# Windows (cmd)
-.venv\Scripts\activate.bat
-```
-
-### 4. Instala las dependencias
-
-```bash
-pip install -r requirements.txt
-# o, si usas uv:
-uv pip install -r requirements.txt
-```
-
-### 5. Configura las variables de entorno
-
-Copia el ejemplo local a `src/.env` y ajustalo a tus necesidades. El backend local y los
-scripts de `scripts/` leen la configuracion desde ese archivo.
-
-```bash
-# Linux / Mac
-cp .env.local.example src/.env
-```
-
-```powershell
-# Windows
-copy .env.local.example src\.env
-```
-
-### 6. Descarga el dataset
-
-```bash
-python scripts/download_dataset.py
-```
-
-Requiere [credenciales de Kaggle](https://www.kaggle.com/docs/api) configuradas. Si no las
-tenes, descarga el dataset manualmente desde Kaggle y descomprimi `train/`, `valid/` y
-`test/` dentro de `data/dataset`.
-
-### 7. Inicia la base de datos
-
-```bash
-docker compose up postgres -d
-```
-
-Solo es necesaria con `USE_PGVECTOR=true` (default). Con `USE_PGVECTOR=false` se usa la
-base vectorial JSON (`data/embeddings.json`) y no hace falta docker para trabajar localmente.
-
-### 8. Inicia el backend
-
-```bash
-cd src
-uvicorn app.main:app --reload --port 8000
-```
-
-### 9. Inicia el frontend (en otra terminal, con el venv activado)
-
-```bash
-cd src
-uvicorn frontend.app:app --port 8080
-```
-
-### 10. Verifica que todo este corriendo
-
-- Frontend: `http://localhost:8080`
-- Backend: `http://localhost:8000/health` (muestra el modelo seleccionado y los checkpoints encontrados)
-
-### 11. A trabajar
-
-1. Implementa las funciones de la Etapa 1 en `src/lib/services/similarity_service.py`.
-2. Indexa el dataset en la base vectorial: `python scripts/build_index.py --split train`
-   (desde la raiz del repo).
-3. Proba la busqueda por similitud desde el frontend (pestaña Etapa 1).
-4. Continua con las Etapas 2 y 3. La Etapa 2 (dataset, preprocesamiento y
-   entrenamiento) se trabaja en `etapa2_colab.ipynb`; el informe se documenta
-   en `informe.ipynb`.
-
-## Scripts provistos
-
-Se ejecutan desde la raiz del repositorio con el ambiente local activo (y postgres corriendo
-si `USE_PGVECTOR=true`). Leen la configuracion de `src/.env` si existe:
+##  Scripts útiles
 
 ```bash
 # Descargar el dataset de Kaggle a data/dataset
 python scripts/download_dataset.py
 
-# Indexar el dataset en la base vectorial (requiere Etapa 1 implementada)
+# Indexar el dataset en la base vectorial
 python scripts/build_index.py --split train
 
-# Entrenar y evaluar el clasificador localmente (alternativa a etapa2_colab.ipynb)
+# Entrenar y evaluar el clasificador (alternativa a etapa2_colab.ipynb)
 python scripts/train_classifier.py --model resnet18_finetuned
 ```
 
-## Configuracion
+##  Configuración
 
-No hardcodear parametros. Configurar mediante `.env`:
+Toda la configuración se maneja vía `.env` (no hay parámetros hardcodeados):
 
-1. En la ejecucion local copiar `.env.local.example` a `src/.env`
-2. Ajustar variables de modelo seleccionado (`EMBEDDING_MODEL`), threshold de similitud,
-   cantidad de vecinos (`TOP_K`), paths y configuracion de YOLO
-3. Opcional ( habilitada por defecto ): configurar conexion a PostgreSQL + pgvector
-
-## Endpoints
-
-- Backend: `http://localhost:8000`
-- PostgreSQL/pgvector: `localhost:5432`
-- Frontend (imagen provista por catedra): `http://localhost:8080`
-
-| Endpoint | Descripcion |
-|----------|-------------|
-| `POST /upload` | Sube una imagen al servidor |
-| `POST /search` | Etapa 1: busqueda por similitud (acepta `model` y `top_k`) |
-| `POST /classify` | Etapa 2: clasificacion con el modelo entrenado |
-| `POST /detect` | Etapa 3: deteccion + clasificacion |
-| `GET /status/{job_id}` | Estado del procesamiento asincronico |
-| `GET /models` | Modelos de embeddings disponibles |
-| `GET /health` | Estado del backend |
-
-## Pipeline provisto (base funcional)
-
-1. Orquestacion completa de busqueda por similitud (Etapa 1) y deteccion + clasificacion (Etapa 3)
-2. Seleccion dinamica del modelo de embeddings: `baseline`, `resnet18_finetuned`, `cnn_custom`
-3. Busqueda por similitud configurable (`cosine` o `l2`) con manejo de desconocidos via `SIMILARITY_THRESHOLD`
-4. Persistencia configurable en JSON o PostgreSQL + pgvector (`USE_PGVECTOR`)
-5. Funciones auxiliares de evaluacion (`lib/evaluation/metrics.py`): NDCG@10, precision/recall/F1, specificity
-6. Herramientas de visualizacion (`lib/visualization/draw.py`)
-7. Frontend Gradio con una pestaña por etapa: Etapa 1 (imagen consultada, top K similares,
-   raza predicha, seleccion de modelo), Etapa 2 (clasificacion supervisada con el modelo
-   entrenado) y Etapa 3 (bounding boxes, razas y scores)
-
-Las funciones de cada etapa estan marcadas con `NotImplementedError` y deben ser completadas
-por el equipo para que el pipeline funcione end-to-end.
-
-## Etapa 2 en Google Colab
-
-El entrenamiento (Etapa 2) se trabaja en **Google Colab** (subir la notebook a Colab o
-abrirla desde GitHub) para aprovechar la GPU. Ademas de las funciones a implementar,
-se espera un pequeño estudio de resultados documentado.
-
-### Etapa 2: `etapa2_colab.ipynb`
-
-Todo el trabajo de entrenamiento se hace en esta notebook:
-
-1. Implementar `train_classifier`, `evaluate_classifier` y `extract_custom_embedding`
-   en el fork y commitearlas.
-2. En Colab: clonar el fork, descargar el dataset, analizar su distribucion y definir los
-   splits, justificar el preprocesamiento y el data augmentation, entrenar (ResNet18
-   fine-tuned y, opcionalmente, la CNN propia), evaluar (accuracy, precision, recall,
-   specificity, F1, matriz de confusion, curvas) y realizar el estudio comparativo entre
-   modelos.
-3. Descargar los checkpoints a `models/` del entorno local (la aplicacion los usa en las
-   pestañas Etapa 1 y 2) y publicarlos en un link de solo lectura publico.
-
-## Notas importantes
-
-- La implementacion actual es una base operativa para pruebas end-to-end y debe completarse
-  con las funciones de cada etapa.
-- Para usar `pgvector`, levantar `postgres` y definir `USE_PGVECTOR=true` en `.env`.
-- `EMBEDDING_DIM` debe coincidir con la dimension del embedding del modelo elegido; al
-  cambiar de modelo de embeddings hay que reindexar la base (`scripts/build_index.py`).
-- Colocar los modelos entrenados en `models`, los cuales deberan estar disponibles en un
-  link con acceso de solo lectura publico para poder ser descargados por los docentes.
-
-## Entregables
-
-- Repositorio Git privado (fork de este template).
-- Pull Request abierto contra el repositorio original provisto por la catedra
-  (sera evaluado **sin mergear** a main o el branch principal).
-- Informe en IPYNB (`informe.ipynb`).
-- Notebook de Colab ejecutada, con sus salidas (`etapa2_colab.ipynb`).
-
-Para que el trabajo practico se considere aprobado, el sistema debe andar sin errores
-corriendo los siguientes comandos :
-
-```bash
-docker compose build
-docker compose up
-```
-
-## Fecha de entrega
-
-Sabado 27/06 hasta las 23:59 (via campus).
-
-- Solo se consideraran commits hasta esa hora
-- Se recomienda trabajar de forma incremental (no un unico commit final)
+- `EMBEDDING_MODEL`: modelo de embeddings usado en la búsqueda por similitud
+  (`baseline`, `resnet18_finetuned`, `cnn_custom`)
+- `SIMILARITY_THRESHOLD`, `TOP_K`: umbral de similitud y cantidad de vecinos
+- `USE_PGVECTOR`: `true` para PostgreSQL + pgvector, `false` para base JSON
+- `EMBEDDING_DIM`: debe coincidir con la dimensión del modelo elegido; al cambiar de
+  modelo hay que reindexar (`scripts/build_index.py`)
+- `RESNET18_MODEL_NAME`, `CNN_CUSTOM_MODEL_NAME`: rutas a los checkpoints en `models/`
