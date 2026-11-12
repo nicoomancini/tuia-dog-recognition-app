@@ -12,6 +12,8 @@
 [![pgvector](https://img.shields.io/badge/pgvector-PostgreSQL-4169E1?logo=postgresql&logoColor=white)]()
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)]()
 
+**Languages:** English | [Español](README.es.md)
+
 </div>
 
 ---
