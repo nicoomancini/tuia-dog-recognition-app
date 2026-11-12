@@ -124,7 +124,10 @@ Breed Prediction or "Unknown"
 ### Application screenshot
 
 <div align="center">
-  <img src="docs/screenshots/etapa1_similitud.png"
+    <img src="docs/screenshots/Etapa1_Similitud-1.png"
+       alt="Stage 1 - Visual Similarity Search"
+       width="1000"/>
+    <img src="docs/screenshots/Etapa1_Similitud-2.png"
        alt="Stage 1 - Visual Similarity Search"
        width="1000"/>
 </div>
@@ -197,7 +200,10 @@ Predicted Breed + Confidence
 ### Application screenshot
 
 <div align="center">
-  <img src="docs/screenshots/etapa2_clasificacion.png"
+    <img src="docs/screenshots/Etapa2_Clasificación-1.png"
+       alt="Stage 2 - Supervised Classification"
+       width="1000"/>
+    <img src="docs/screenshots/Etapa2_Clasificación-2.png"
        alt="Stage 2 - Supervised Classification"
        width="1000"/>
 </div>
@@ -254,7 +260,10 @@ These findings provide a clear path for future improvements, such as fine-tuning
 ### Application screenshot
 
 <div align="center">
-  <img src="docs/screenshots/etapa3_deteccion.png"
+    <img src="docs/screenshots/Etapa3_Detección-1.png"
+       alt="Stage 3 - Detection and Classification"
+       width="1000"/>
+    <img src="docs/screenshots/Etapa3_Detección-2.png"
        alt="Stage 3 - Detection and Classification"
        width="1000"/>
 </div>
